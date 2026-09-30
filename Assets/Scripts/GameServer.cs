@@ -41,6 +41,10 @@ public class GameServer : MonoBehaviour
     public int itemsPerCharge = 5;       // cada N objetos recogidos = +1 carga de cada power-up
     public int startCharges = 1;
 
+    [Header("Laberinto (Spawns Seguros)")]
+    public Transform[] spawnNodes;       // Nodos vacíos colocados a mano
+    public Transform playerSpawnPoint;   // Punto fijo donde aparecen los fantasmas (centro del mapa)
+
     class Conn
     {
         public int id; public TcpClient tcp; public StreamWriter writer;
@@ -192,9 +196,11 @@ public class GameServer : MonoBehaviour
         var sbP = new StringBuilder();
         foreach (var c in conns.Values)
         {
-            Vector2 s; int tries = 0;
-            do { s = RandomPoint(arenaHalf - 5f); tries++; }
-            while (tries < 100 && spawns.Exists(o => Vector2.Distance(o, s) < 15f)); // sin superposición
+            Vector2 s;
+            if (playerSpawnPoint != null)
+                s = new Vector2(playerSpawnPoint.position.x, playerSpawnPoint.position.z);
+            else
+                s = RandomPoint(arenaHalf - 5f);
             spawns.Add(s);
             c.pos = s; c.score = 0; c.blockedUntil = 0;
             c.speedCharges = startCharges; c.blockCharges = startCharges;
@@ -229,7 +235,7 @@ public class GameServer : MonoBehaviour
         if (!playing || itemId < 0 || itemId >= items.Count) return;
         var it = items[itemId];
         if (it.taken) return;                                   // conflicto: gana el primero en llegar
-        if (Vector2.Distance(c.pos, it.pos) > pickupRadius * 2.5f) return; // validación del servidor
+        // validación de distancia desactivada: el cliente ya valida antes de enviar PICK
         it.taken = true;
         c.score++;
         Broadcast("ITEM|" + itemId + "|" + c.id + "|" + c.score);
@@ -309,5 +315,13 @@ public class GameServer : MonoBehaviour
     void Broadcast(string msg) { foreach (var c in conns.Values) Send(c, msg); }
     void BroadcastExcept(int id, string msg) { foreach (var c in conns.Values) if (c.id != id) Send(c, msg); }
 
-    Vector2 RandomPoint(float half) { return new Vector2(Random.Range(-half, half), Random.Range(-half, half)); }
+    Vector2 RandomPoint(float half) 
+    { 
+        if (spawnNodes != null && spawnNodes.Length > 0)
+        {
+            Transform t = spawnNodes[Random.Range(0, spawnNodes.Length)];
+            return new Vector2(t.position.x, t.position.z);
+        }
+        return new Vector2(Random.Range(-half, half), Random.Range(-half, half)); 
+    }
 }

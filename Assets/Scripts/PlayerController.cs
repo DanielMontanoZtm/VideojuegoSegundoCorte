@@ -22,8 +22,12 @@ public class PlayerController : MonoBehaviour
     static readonly int BoostHash = Animator.StringToHash("Boost");
     static readonly int BlockedHash = Animator.StringToHash("Blocked");
 
+    [Header("Efectos Temáticos")]
+    public TrailRenderer speedTrail;
+
     CharacterController cc;
     Renderer[] rends;
+    Color[] originalColors;   // colores originales de cada renderer
     Color baseColor = Color.white;
     float speedUntil, blockUntil, sendTimer;
     Vector3 remoteTarget, lastPos;
@@ -36,16 +40,31 @@ public class PlayerController : MonoBehaviour
     void Awake()
     {
         cc = GetComponent<CharacterController>();
-        rends = GetComponentsInChildren<Renderer>();
+        rends = GetComponents<Renderer>();  // SOLO el objeto raíz, NO los hijos (ojos)
         if (animator == null) animator = GetComponentInChildren<Animator>();
+        if (speedTrail == null) speedTrail = GetComponentInChildren<TrailRenderer>();
     }
 
     public void Init(int playerId, bool local, Color color)
     {
         id = playerId; isLocal = local; baseColor = color;
-        cc.enabled = local;                 // los remotos no usan CharacterController
+        cc.enabled = local;
         remoteTarget = transform.position; lastPos = transform.position;
         lastVisualState = -1;
+
+        // Fijar rotación: el fantasma siempre mira hacia la derecha y queda derecho
+        transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+
+        // Guardar colores originales y pintar solo las partes "neutras" (cuerpo)
+        originalColors = new Color[rends.Length];
+        for (int i = 0; i < rends.Length; i++)
+        {
+            Material mat = rends[i].material;
+            if (mat.HasProperty("_BaseColor")) originalColors[i] = mat.GetColor("_BaseColor");
+            else if (mat.HasProperty("_Color")) originalColors[i] = mat.color;
+            else originalColors[i] = Color.white;
+        }
+        ApplyColor(baseColor);
     }
 
     public void SetRemote(float x, float z, float rotY) { remoteTarget = new Vector3(x, transform.position.y, z); remoteRot = rotY; }
@@ -67,19 +86,17 @@ public class PlayerController : MonoBehaviour
         if (VirtualJoystick.Instance != null) input += VirtualJoystick.Instance.Value;
         input = Vector2.ClampMagnitude(input, 1f);
 
-        Vector3 dir = new Vector3(input.x, 0f, input.y);   // cámara fija: arriba de la pantalla = +Z
+        Vector3 dir = new Vector3(input.x, 0f, input.y);
         float speed = baseSpeed * (IsBoosted ? speedBoost : 1f);
         if (dir.sqrMagnitude > 0.001f)
         {
             cc.Move(dir * speed * Time.deltaTime);
-            Quaternion look = Quaternion.LookRotation(dir);
-            transform.rotation = Quaternion.RotateTowards(transform.rotation, look, turnSpeed * Time.deltaTime);
+            // Los fantasmas de Pac-Man no rotan, siempre miran al frente
         }
-        // Seguridad: no salir del terreno
-        Vector3 p = transform.position;
-        Vector3 clamped = new Vector3(Mathf.Clamp(p.x, -arenaHalf, arenaHalf), p.y, Mathf.Clamp(p.z, -arenaHalf, arenaHalf));
-        if (clamped != p) cc.Move(clamped - p);
     }
+
+    /// Centro real del fantasma (para detección de pickup precisa)
+    public Vector3 Center { get { return cc != null ? cc.bounds.center : transform.position; } }
 
     void SendPosition(bool playing)
     {
@@ -110,13 +127,32 @@ public class PlayerController : MonoBehaviour
             animator.SetBool(BlockedHash, IsBlocked);
         }
 
+        if (speedTrail != null) speedTrail.emitting = IsBoosted;
+
         int state = IsBlocked ? 2 : (IsBoosted ? 1 : 0);
         if (state != lastVisualState)
         {
             lastVisualState = state;
             Color c = state == 2 ? new Color(0.4f, 0.9f, 1f) : (state == 1 ? new Color(1f, 0.95f, 0.2f) : baseColor);
-            foreach (var r in rends) if (r != null && r.material.HasProperty("_Color")) r.material.color = c;
-            foreach (var r in rends) if (r != null && r.material.HasProperty("_BaseColor")) r.material.SetColor("_BaseColor", c);
+            ApplyColor(c);
+        }
+    }
+
+    /// Solo pinta renderers cuyo color original es cercano a blanco/gris (el cuerpo).
+    /// Deja intactos los renderers con colores únicos (ojos, pupilas, etc.).
+    void ApplyColor(Color c)
+    {
+        if (originalColors == null) return;
+        for (int i = 0; i < rends.Length; i++)
+        {
+            if (rends[i] == null) continue;
+            // Si el color original era muy saturado o muy oscuro, es un detalle (ojos) → no tocar
+            float sat, val, hue;
+            Color.RGBToHSV(originalColors[i], out hue, out sat, out val);
+            if (sat > 0.3f || val < 0.3f) continue;  // es un detalle con color propio, no pintar
+
+            if (rends[i].material.HasProperty("_BaseColor")) rends[i].material.SetColor("_BaseColor", c);
+            else if (rends[i].material.HasProperty("_Color")) rends[i].material.color = c;
         }
     }
 }

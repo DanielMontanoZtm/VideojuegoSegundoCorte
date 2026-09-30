@@ -200,16 +200,32 @@ public class GameManager : MonoBehaviour
     // ------------------------------------------------------------ recolección (detección en el cliente local)
     void Update()
     {
+        // ATAJOS TEMPORALES PARA PROBAR SIN UI
+        if (Input.GetKeyDown(KeyCode.H)) 
+        { 
+            string err; 
+            if (Host("Prueba", out err)) Debug.Log("✅ HOST CREADO CON ÉXITO. Presiona Enter para iniciar.");
+            else Debug.LogError("❌ ERROR AL CREAR HOST: " + err);
+        }
+        if (Input.GetKeyDown(KeyCode.Return)) 
+        { 
+            Debug.Log("Intentando iniciar partida...");
+            if (IsHost) {
+                if (!GameServer.Instance.StartMatch()) Debug.LogWarning("❌ El servidor se negó a iniciar. Revisa MinPlayers o si ya estaba jugando.");
+            } else {
+                Debug.LogWarning("❌ No eres el host o el servidor no está corriendo.");
+            }
+        }
+
         if (State != GameState.Playing || local == null) return;
-        Vector3 lp = local.transform.position;
+        Vector3 lp = local.Center;  // centro real del fantasma, no los pies
         foreach (var kv in items)
         {
             var it = kv.Value;
-            if (it == null || Time.time < it.nextRequest) continue;
+            if (it == null) continue;
             Vector3 d = it.transform.position - lp; d.y = 0;
             if (d.sqrMagnitude <= pickupRadius * pickupRadius)
             {
-                it.nextRequest = Time.time + 0.4f;   // evita spamear mientras el servidor responde
                 client.Send("PICK|" + kv.Key);
             }
         }
