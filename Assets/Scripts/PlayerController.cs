@@ -40,7 +40,8 @@ public class PlayerController : MonoBehaviour
     void Awake()
     {
         cc = GetComponent<CharacterController>();
-        rends = GetComponents<Renderer>();  // SOLO el objeto raíz, NO los hijos (ojos)
+        // Captura los renderers del cuerpo aunque estén en objetos hijos
+        rends = GetComponentsInChildren<Renderer>(); 
         if (animator == null) animator = GetComponentInChildren<Animator>();
         if (speedTrail == null) speedTrail = GetComponentInChildren<TrailRenderer>();
     }
@@ -140,19 +141,17 @@ public class PlayerController : MonoBehaviour
 
     /// Solo pinta renderers cuyo color original es cercano a blanco/gris (el cuerpo).
     /// Deja intactos los renderers con colores únicos (ojos, pupilas, etc.).
+    [Header("Configuración de Apariencia")]
+    public Renderer bodyRenderer; // Arrastra AQUÍ únicamente la malla del cuerpo en el Inspector
+
     void ApplyColor(Color c)
     {
-        if (originalColors == null) return;
-        for (int i = 0; i < rends.Length; i++)
+        // Si se asigna la malla del cuerpo, solo pinta el cuerpo y no toca los ojos
+        if (bodyRenderer != null)
         {
-            if (rends[i] == null) continue;
-            // Si el color original era muy saturado o muy oscuro, es un detalle (ojos) → no tocar
-            float sat, val, hue;
-            Color.RGBToHSV(originalColors[i], out hue, out sat, out val);
-            if (sat > 0.3f || val < 0.3f) continue;  // es un detalle con color propio, no pintar
-
-            if (rends[i].material.HasProperty("_BaseColor")) rends[i].material.SetColor("_BaseColor", c);
-            else if (rends[i].material.HasProperty("_Color")) rends[i].material.color = c;
+            Material mat = bodyRenderer.material;
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", c);
+            else if (mat.HasProperty("_Color")) mat.color = c;
         }
     }
 }

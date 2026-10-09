@@ -76,7 +76,15 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 78ad34b0875ce0d4595650be62d685df, type: 3}
       insertIndex: -1
       addedObject: {fileID: 4382459027451296189}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 78ad34b0875ce0d4595650be62d685df, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4546045959229304474}
   m_SourcePrefab: {fileID: 100100000, guid: 78ad34b0875ce0d4595650be62d685df, type: 3}
+--- !u!23 &7375080817267504255 stripped
+MeshRenderer:
+  m_CorrespondingSourceObject: {fileID: -7098042536458105381, guid: 78ad34b0875ce0d4595650be62d685df, type: 3}
+  m_PrefabInstance: {fileID: 8874100100017404324}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &8639675225770198261 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 78ad34b0875ce0d4595650be62d685df, type: 3}
@@ -217,3 +225,25 @@ TrailRenderer:
   m_Autodestruct: 0
   m_Emitting: 0
   m_ApplyActiveColorSpace: 1
+--- !u!114 &4546045959229304474
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8639675225770198261}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9c386fa6185e550498e3d95eeefe187f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerController
+  id: 0
+  isLocal: 0
+  baseSpeed: 8
+  speedBoost: 1.8
+  turnSpeed: 720
+  arenaHalf: 49
+  sendRate: 15
+  animator: {fileID: 0}
+  speedTrail: {fileID: 0}
+  bodyRenderer: {fileID: 7375080817267504255}
