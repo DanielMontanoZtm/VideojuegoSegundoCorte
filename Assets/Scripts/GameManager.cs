@@ -3,22 +3,24 @@ using UnityEngine;
 
 public enum GameState { Menu, Lobby, Playing, Results }
 
-/// Estado del juego en el cliente: interpreta los mensajes del servidor, crea/destruye
-/// jugadores y objetos, y expone los datos que muestra la UI.
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
     [Header("Prefabs")]
-    public GameObject playerPrefab;     // cápsula/personaje con Animator (opcional)
-    public GameObject itemPrefab;       // esfera/moneda (sin collider sólido)
+    public GameObject cherryPrefab;     
+    public GameObject playerPrefab;     
+    public GameObject itemPrefab;       
     public Color[] playerColors = { new Color(0.9f, 0.2f, 0.2f), new Color(0.2f, 0.5f, 1f), new Color(0.2f, 0.8f, 0.3f), new Color(1f, 0.7f, 0.1f) };
 
     [Header("Escena")]
     public TopDownCamera topCamera;
     public float spawnY = 1f;
     public float pickupRadius = 2f;
-    public AudioClip pickupSfx;
+
+    [Header("Efectos de Audio")]
+    public AudioClip orbSfx;      // 'Consumir_Punto_Normal.wav'
+    public AudioClip powerUpSfx;  // 'Power_Up.wav'
 
     // Estado expuesto a la UI
     public GameState State { get; private set; }
@@ -53,7 +55,6 @@ public class GameManager : MonoBehaviour
 
     void OnDestroy() { if (client != null) client.MessageReceived -= Handle; }
 
-    // ------------------------------------------------------------ acciones de la UI
     public bool Host(string name, out string error)
     {
         if (!server.StartServer(out error)) return false;
@@ -85,7 +86,6 @@ public class GameManager : MonoBehaviour
     public void UseBlock() { if (State == GameState.Playing) client.Send("BLOCK"); }
     public void SetMessage(string m, float dur = 2f) { Message = m; MessageUntil = Time.time + dur; }
 
-    // ------------------------------------------------------------ mensajes del servidor
     void Handle(string[] p)
     {
         try
@@ -111,12 +111,26 @@ public class GameManager : MonoBehaviour
                 case "ITEM":
                     {
                         int itemId = int.Parse(p[1]), pid = int.Parse(p[2]);
-                        Scores[pid] = int.Parse(p[3]);
+                        if (pid >= 0 && pid < 4) Scores[pid] = int.Parse(p[3]);
+
                         CollectibleItem it;
-                        if (items.TryGetValue(itemId, out it))
+                        if (itemId >= 0 && items.TryGetValue(itemId, out it))
                         {
-                            if (pickupSfx != null) AudioSource.PlayClipAtPoint(pickupSfx, it.transform.position);
-                            Destroy(it.gameObject); items.Remove(itemId);
+                            // Detecta si es la cereza o el orbe normal
+                            bool isCherry = it.gameObject.name.ToLower().Contains("fruta") || it.gameObject.name.ToLower().Contains("cherry");
+                            AudioClip clipToPlay = isCherry ? powerUpSfx : orbSfx;
+
+                            if (clipToPlay != null)
+                            {
+                                // Reproduce el sonido en la posición de la cámara (Sonido 2D directo a pleno volumen)
+                                Vector3 listenerPos = Camera.main != null ? Camera.main.transform.position : transform.position;
+                                AudioSource.PlayClipAtPoint(clipToPlay, listenerPos, 1.0f);
+                            }
+
+                            if (pid == MyId && local != null) local.TriggerVibration();
+
+                            Destroy(it.gameObject); 
+                            items.Remove(itemId);
                         }
                         break;
                     }
@@ -125,7 +139,12 @@ public class GameManager : MonoBehaviour
                     {
                         PlayerController s;
                         if (players.TryGetValue(int.Parse(p[1]), out s)) s.ApplySpeed(NetUtil.P(p[2]));
-                        if (int.Parse(p[1]) == MyId) SetMessage("¡Velocidad!");
+                        if (int.Parse(p[1]) == MyId) 
+                        {
+                            SetMessage("¡Velocidad!");
+                            if (powerUpSfx != null) AudioSource.PlayClipAtPoint(powerUpSfx, transform.position);
+                            if (local != null) local.TriggerVibration();
+                        }
                         break;
                     }
                 case "BLOCKED":
@@ -134,7 +153,12 @@ public class GameManager : MonoBehaviour
                         PlayerController b;
                         if (players.TryGetValue(target, out b)) b.ApplyBlock(NetUtil.P(p[2]));
                         if (target == MyId) SetMessage("¡Te bloquearon!", 2.5f);
-                        else if (int.Parse(p[3]) == MyId) SetMessage("¡Rival bloqueado!");
+                        else if (int.Parse(p[3]) == MyId) 
+                        {
+                            SetMessage("¡Rival bloqueado!");
+                            if (powerUpSfx != null) AudioSource.PlayClipAtPoint(powerUpSfx, transform.position);
+                            if (local != null) local.TriggerVibration();
+                        }
                         break;
                     }
                 case "DENY": SetMessage("No disponible (sin cargas, enfriamiento o rival fuera de rango)"); break;
@@ -179,8 +203,15 @@ public class GameManager : MonoBehaviour
 
         foreach (var e in p[3].Split(';'))
         {
-            var v = e.Split(':'); int id = int.Parse(v[0]);
-            var go = Instantiate(itemPrefab, new Vector3(NetUtil.P(v[1]), spawnY, NetUtil.P(v[2])), Quaternion.identity);
+            var v = e.Split(':'); 
+            int id = int.Parse(v[0]);
+            float x = NetUtil.P(v[1]);
+            float z = NetUtil.P(v[2]);
+            int type = (v.Length > 3) ? int.Parse(v[3]) : 0; 
+
+            GameObject prefabToUse = (type == 1 && cherryPrefab != null) ? cherryPrefab : itemPrefab;
+
+            var go = Instantiate(prefabToUse, new Vector3(x, spawnY, z), prefabToUse.transform.rotation);
             var ci = go.GetComponent<CollectibleItem>();
             if (ci == null) ci = go.AddComponent<CollectibleItem>();
             ci.id = id;
@@ -197,28 +228,21 @@ public class GameManager : MonoBehaviour
         players.Clear(); items.Clear(); local = null;
     }
 
-    // ------------------------------------------------------------ recolección (detección en el cliente local)
     void Update()
     {
-        // ATAJOS TEMPORALES PARA PROBAR SIN UI
         if (Input.GetKeyDown(KeyCode.H)) 
         { 
             string err; 
-            if (Host("Prueba", out err)) Debug.Log("✅ HOST CREADO CON ÉXITO. Presiona Enter para iniciar.");
-            else Debug.LogError("❌ ERROR AL CREAR HOST: " + err);
+            if (Host("Prueba", out err)) Debug.Log("HOST CREADO. Presiona Enter para iniciar.");
+            else Debug.LogError("ERROR AL CREAR HOST: " + err);
         }
         if (Input.GetKeyDown(KeyCode.Return)) 
         { 
-            Debug.Log("Intentando iniciar partida...");
-            if (IsHost) {
-                if (!GameServer.Instance.StartMatch()) Debug.LogWarning("❌ El servidor se negó a iniciar. Revisa MinPlayers o si ya estaba jugando.");
-            } else {
-                Debug.LogWarning("❌ No eres el host o el servidor no está corriendo.");
-            }
+            if (IsHost) GameServer.Instance.StartMatch();
         }
 
         if (State != GameState.Playing || local == null) return;
-        Vector3 lp = local.Center;  // centro real del fantasma, no los pies
+        Vector3 lp = local.Center;  
         foreach (var kv in items)
         {
             var it = kv.Value;

@@ -14,7 +14,7 @@ using Random = UnityEngine.Random;
 ///
 /// Protocolo (texto, 1 mensaje por línea, campos separados por '|'):
 ///  Cliente -> Servidor: JOIN|nombre  POS|x|z|rotY  PICK|itemId  SPEED  BLOCK
-///  Servidor -> Clientes: WELCOME|id  FULL  LOBBY|id:nombre;...  START|dur|id:x:z;...|i:x:z;...
+///  Servidor -> Clientes: WELCOME|id  FULL  LOBBY|id:nombre;...  START|dur|id:x:z;...|i:x:z:tipo;...
 ///     POS|id|x|z|rotY  ITEM|itemId|playerId|score  PU|cargasVel|cargasBloq
 ///     SPEEDON|id|dur  BLOCKED|idObjetivo|dur|idAutor  TIME|seg  END|id:score;...|ganador  LEFT|id  DENY
 public class GameServer : MonoBehaviour
@@ -53,7 +53,9 @@ public class GameServer : MonoBehaviour
         public float nextSpeedTime, nextBlockTime, blockedUntil;
     }
     struct Incoming { public int id; public string msg; public TcpClient tcp; }
-    class ItemData { public Vector2 pos; public bool taken; }
+    
+    // itemType: 0 = Orbe Normal (+1 punto), 1 = Cereza (-2 puntos al líder rival)
+    class ItemData { public Vector2 pos; public bool taken; public int itemType; }
 
     TcpListener listener;
     Thread acceptThread;
@@ -198,7 +200,8 @@ public class GameServer : MonoBehaviour
         {
             Vector2 s;
             if (playerSpawnPoint != null)
-                s = new Vector2(playerSpawnPoint.position.x, playerSpawnPoint.position.z);
+                // Se resta 2.5f en Z para alejar al personaje del muro superior
+                s = new Vector2(playerSpawnPoint.position.x, playerSpawnPoint.position.z - 2.5f);
             else
                 s = RandomPoint(arenaHalf - 5f);
             spawns.Add(s);
@@ -219,9 +222,13 @@ public class GameServer : MonoBehaviour
                 s = RandomPoint(arenaHalf - 3f); tries++;
                 bad = spawns.Exists(o => Vector2.Distance(o, s) < 4f) || items.Exists(o => Vector2.Distance(o.pos, s) < 3f);
             } while (bad && tries < 100);
-            items.Add(new ItemData { pos = s });
+
+            // Los primeros 3 ítems generados serán Cerezas (1), los demás Orbes normales (0)
+            int itemType = (i < 3) ? 1 : 0;
+
+            items.Add(new ItemData { pos = s, itemType = itemType });
             if (i > 0) sbI.Append(';');
-            sbI.Append(i).Append(':').Append(NetUtil.F(s.x)).Append(':').Append(NetUtil.F(s.y));
+            sbI.Append(i).Append(':').Append(NetUtil.F(s.x)).Append(':').Append(NetUtil.F(s.y)).Append(':').Append(itemType);
         }
 
         playing = true; timeLeft = matchDuration; lastTimeSent = Time.time;
@@ -234,16 +241,47 @@ public class GameServer : MonoBehaviour
     {
         if (!playing || itemId < 0 || itemId >= items.Count) return;
         var it = items[itemId];
-        if (it.taken) return;                                   // conflicto: gana el primero en llegar
-        // validación de distancia desactivada: el cliente ya valida antes de enviar PICK
+        if (it.taken) return;
+
         it.taken = true;
-        c.score++;
-        Broadcast("ITEM|" + itemId + "|" + c.id + "|" + c.score);
-        if (c.score % itemsPerCharge == 0)
+
+        if (it.itemType == 1) // CEREZA: Resta 2 puntos al rival que va liderando
         {
-            c.speedCharges++; c.blockCharges++;
-            SendCharges(c);
+            // Notifica la destrucción de la cereza
+            Broadcast("ITEM|" + itemId + "|" + c.id + "|" + c.score);
+
+            // Buscar al oponente con mayor puntaje
+            Conn leader = null;
+            int maxScore = -1;
+            foreach (var o in conns.Values)
+            {
+                if (o.id != c.id && o.score > maxScore)
+                {
+                    maxScore = o.score;
+                    leader = o;
+                }
+            }
+
+            // Si hay un líder oponente con puntos, le restamos 2 (sin bajar de 0)
+            if (leader != null && leader.score > 0)
+            {
+                leader.score = Mathf.Max(0, leader.score - 2);
+                // itemId = -1 para que el cliente solo actualice el puntaje en la UI sin buscar ningún objeto
+                Broadcast("ITEM|-1|" + leader.id + "|" + leader.score);
+            }
         }
+        else // ORBE NORMAL: Incrementa el puntaje del jugador en +1
+        {
+            c.score++;
+            Broadcast("ITEM|" + itemId + "|" + c.id + "|" + c.score);
+
+            if (c.score % itemsPerCharge == 0)
+            {
+                c.speedCharges++; c.blockCharges++;
+                SendCharges(c);
+            }
+        }
+
         if (items.TrueForAll(i => i.taken)) EndMatch();
     }
 
