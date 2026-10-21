@@ -9,8 +9,8 @@ public class PlayerController : MonoBehaviour
     public bool isLocal;
 
     [Header("Movimiento")]
-    public float baseSpeed = 8f;
-    public float speedBoost = 1.8f;
+    public float baseSpeed = 14f;       // Aumentado a 14f para mayor agilidad
+    public float speedBoost = 2.2f;     // Aumentado a 2.2f para el super impulso
     public float turnSpeed = 720f;
     public float arenaHalf = 49f;
     public float sendRate = 15f;
@@ -24,6 +24,9 @@ public class PlayerController : MonoBehaviour
 
     [Header("Efectos Temáticos")]
     public TrailRenderer speedTrail;
+
+    [Header("Configuración de Apariencia")]
+    public Renderer bodyRenderer; // Arrastra AQUÍ únicamente la malla del cuerpo en el Inspector
 
     CharacterController cc;
     Renderer[] rends;
@@ -40,7 +43,6 @@ public class PlayerController : MonoBehaviour
     void Awake()
     {
         cc = GetComponent<CharacterController>();
-        // Captura los renderers del cuerpo aunque estén en objetos hijos
         rends = GetComponentsInChildren<Renderer>(); 
         if (animator == null) animator = GetComponentInChildren<Animator>();
         if (speedTrail == null) speedTrail = GetComponentInChildren<TrailRenderer>();
@@ -80,6 +82,7 @@ public class PlayerController : MonoBehaviour
         UpdateVisuals();
     }
 
+        
     void LocalMove()
     {
         if (IsBlocked) return;
@@ -89,10 +92,14 @@ public class PlayerController : MonoBehaviour
 
         Vector3 dir = new Vector3(input.x, 0f, input.y);
         float speed = baseSpeed * (IsBoosted ? speedBoost : 1f);
+
         if (dir.sqrMagnitude > 0.001f)
         {
-            cc.Move(dir * speed * Time.deltaTime);
-            // Los fantasmas de Pac-Man no rotan, siempre miran al frente
+            Vector3 moveVelocity = dir * speed;
+            // Mantiene al fantasma pegado al suelo sin pegarse a los muros
+            moveVelocity.y = -10f; 
+
+            cc.Move(moveVelocity * Time.deltaTime);
         }
     }
 
@@ -139,14 +146,8 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    /// Solo pinta renderers cuyo color original es cercano a blanco/gris (el cuerpo).
-    /// Deja intactos los renderers con colores únicos (ojos, pupilas, etc.).
-    [Header("Configuración de Apariencia")]
-    public Renderer bodyRenderer; // Arrastra AQUÍ únicamente la malla del cuerpo en el Inspector
-
     void ApplyColor(Color c)
     {
-        // Si se asigna la malla del cuerpo, solo pinta el cuerpo y no toca los ojos
         if (bodyRenderer != null)
         {
             Material mat = bodyRenderer.material;
@@ -154,4 +155,7 @@ public class PlayerController : MonoBehaviour
             else if (mat.HasProperty("_Color")) mat.color = c;
         }
     }
+
+
+
 }
