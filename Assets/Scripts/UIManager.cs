@@ -91,12 +91,13 @@ public class UIManager : MonoBehaviour
         sb.AppendLine("Jugadores (" + gm.ConnectedCount + "/4):");
         for (int i = 0; i < 4; i++)
             if (gm.Connected[i]) sb.AppendLine("• " + gm.Names[i] + (i == gm.MyId ? " (tú)" : ""));
+        int minReq = (GameServer.Instance != null) ? GameServer.Instance.minPlayers : 1;
         if (!gm.IsHost) sb.AppendLine("\nEsperando a que el host inicie...");
-        else if (gm.ConnectedCount < 2) sb.AppendLine("\nSe necesitan mínimo 2 jugadores.");
+        else if (gm.ConnectedCount < minReq) sb.AppendLine("\nSe necesitan mínimo " + minReq + " jugadores.");
         lobbyText.text = sb.ToString();
 
         startButton.gameObject.SetActive(gm.IsHost);
-        startButton.interactable = gm.IsHost && gm.ConnectedCount >= 2;
+        startButton.interactable = gm.IsHost && gm.ConnectedCount >= minReq;
     }
 
     void RefreshHud(string msg)

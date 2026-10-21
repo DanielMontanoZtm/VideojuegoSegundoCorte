@@ -67,6 +67,24 @@ public class PlayerController : MonoBehaviour
     public void ApplySpeed(float dur) { speedUntil = Time.time + dur; }
     public void ApplyBlock(float dur) { blockUntil = Time.time + dur; }
 
+    public void Teleport(Vector3 dest)
+    {
+        // Compensar el desfase entre el pivote del modelo 3D y el centro real del collider del fantasma
+        Vector3 bodyOffset = (cc != null) ? (cc.bounds.center - transform.position) : Vector3.zero;
+        bodyOffset.y = 0f;
+
+        if (cc != null) cc.enabled = false;
+        transform.position = dest - bodyOffset;
+        lastPos = transform.position;
+        if (cc != null) cc.enabled = true;
+
+        // Si es el jugador local, notificar de inmediato al servidor la nueva posición
+        if (isLocal && GameClient.Instance != null && GameClient.Instance.IsConnected)
+        {
+            GameClient.Instance.Send("POS|" + NetUtil.F(transform.position.x) + "|" + NetUtil.F(transform.position.z) + "|" + NetUtil.F(transform.eulerAngles.y));
+        }
+    }
+
     void Update()
     {
         bool playing = GameManager.Instance != null && GameManager.Instance.State == GameState.Playing;
@@ -105,7 +123,10 @@ public class PlayerController : MonoBehaviour
             if (Time.time - lastCollisionTime >= collisionCooldown)
             {
                 lastCollisionTime = Time.time;
-                if (collisionSfx != null) AudioSource.PlayClipAtPoint(collisionSfx, transform.position, 0.7f);
+                if (AudioManager.Instance != null)
+                    AudioManager.Instance.PlayCollision(transform.position);
+                else if (collisionSfx != null)
+                    AudioSource.PlayClipAtPoint(collisionSfx, transform.position, 0.7f);
 
                 // Activa la respuesta háptica/vibración en el smartphone
                 TriggerVibration();

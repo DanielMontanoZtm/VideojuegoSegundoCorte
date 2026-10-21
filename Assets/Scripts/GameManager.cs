@@ -116,15 +116,12 @@ public class GameManager : MonoBehaviour
                         CollectibleItem it;
                         if (itemId >= 0 && items.TryGetValue(itemId, out it))
                         {
-                            // Detecta si es la cereza o el orbe normal
+                            // Reproduce el SFX mediante AudioManager
                             bool isCherry = it.gameObject.name.ToLower().Contains("fruta") || it.gameObject.name.ToLower().Contains("cherry");
-                            AudioClip clipToPlay = isCherry ? powerUpSfx : orbSfx;
-
-                            if (clipToPlay != null)
+                            if (AudioManager.Instance != null)
                             {
-                                // Reproduce el sonido en la posición de la cámara (Sonido 2D directo a pleno volumen)
-                                Vector3 listenerPos = Camera.main != null ? Camera.main.transform.position : transform.position;
-                                AudioSource.PlayClipAtPoint(clipToPlay, listenerPos, 1.0f);
+                                if (isCherry) AudioManager.Instance.PlayPowerUpPickup();
+                                else AudioManager.Instance.PlayOrbPickup();
                             }
 
                             if (pid == MyId && local != null) local.TriggerVibration();
@@ -142,7 +139,7 @@ public class GameManager : MonoBehaviour
                         if (int.Parse(p[1]) == MyId) 
                         {
                             SetMessage("¡Velocidad!");
-                            if (powerUpSfx != null) AudioSource.PlayClipAtPoint(powerUpSfx, transform.position);
+                            if (AudioManager.Instance != null) AudioManager.Instance.PlayPowerUpPickup();
                             if (local != null) local.TriggerVibration();
                         }
                         break;
@@ -156,7 +153,7 @@ public class GameManager : MonoBehaviour
                         else if (int.Parse(p[3]) == MyId) 
                         {
                             SetMessage("¡Rival bloqueado!");
-                            if (powerUpSfx != null) AudioSource.PlayClipAtPoint(powerUpSfx, transform.position);
+                            if (AudioManager.Instance != null) AudioManager.Instance.PlayPowerUpPickup();
                             if (local != null) local.TriggerVibration();
                         }
                         break;

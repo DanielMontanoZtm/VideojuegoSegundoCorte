@@ -25,7 +25,7 @@ public class GameServer : MonoBehaviour
     public int port = 7777;
 
     [Header("Partida")]
-    public int minPlayers = 2;
+    public int minPlayers = 1; // Cambiado a 1 para permitir pruebas en solitario (se puede cambiar en el Inspector a 2 si se desea)
     public int maxPlayers = 4;
     public float matchDuration = 120f;
     public int itemCount = 50;
